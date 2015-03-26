@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project default="create_run_jar" name="Create Runnable Jar for Project ArmourMangler">
+    <!--this file was created by Eclipse Runnable JAR Export Wizard-->
+    <!--ANT 1.7 is required                                        -->
+    <target name="create_run_jar">
+        <jar destfile="C:/Users/Martin/git/ArmourMangler/ArmourMangler.jar" filesetmanifest="mergewithoutmain">
+            <manifest>
+                <attribute name="Main-Class" value="com.toraboka.Skyrim.ArmourMangler.ArmourMangler"/>
+                <attribute name="Class-Path" value="."/>
+            </manifest>
+            <fileset dir="C:/Users/Martin/git/ArmourMangler/bin"/>
+            <fileset dir="C:/Users/Martin/git/skyproc/bin"/>
+            <zipfileset excludes="META-INF/*.SF" src="C:/Users/Martin/git/skyproc/Files/MemTester.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="C:/Users/Martin/git/skyproc/lib/lev.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="C:/Users/Martin/git/skyproc/lib/WinRegistry.jar"/>
+        </jar>
+    </target>
+</project>

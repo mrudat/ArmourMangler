@@ -9,6 +9,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
@@ -30,6 +32,7 @@ import skyproc.GRUP_TYPE;
 import skyproc.Mod;
 import skyproc.ModListing;
 import skyproc.RACE;
+import skyproc.SPDatabase;
 import skyproc.SPGlobal;
 import skyproc.SkyProcSave;
 import skyproc.genenums.Gender;
@@ -143,6 +146,7 @@ public class ArmourMangler implements SUM {
 
 	SUMGUI.progress.setMax(merger.getArmors().size(),
 		"Find Candidate Models");
+
 	int count = 0;
 	for (ARMO armour : merger.getArmors()) {
 	    if (!armour.getTemplate().isNull()) {
@@ -225,7 +229,9 @@ public class ArmourMangler implements SUM {
 	SUMGUI.progress.setMax(
 		armourInformation.size() * raceNameToRACE.size(),
 		"Find Replacement Models And Apply");
+
 	int count = 0;
+
 	for (Entry<String, HashSet<RACE>> i : raceNameToRACE.entrySet()) {
 	    String raceName = i.getKey();
 	    HashSet<RACE> race = i.getValue();
@@ -255,11 +261,10 @@ public class ArmourMangler implements SUM {
 		    SUMGUI.progress.setBar(count);
 		    continue;
 		}
-		HashSet<FormID> temp = new HashSet<FormID>();
-		for (RACE j : race) {
-		    temp.add(j.getForm());
-		}
-		ARMA addOn = ai.getAddOnForRaces(temp, raceName, baseModels);
+		ARMA addOn = ai.getAddOnForRaces(
+			race.stream().map(j -> j.getForm())
+				.collect(Collectors.toSet()), raceName,
+			baseModels);
 		for (String model : foundModels) {
 		    for (GenderPerspective gp : ai.modelsGp.get(model)) {
 			try {
@@ -364,22 +369,55 @@ public class ArmourMangler implements SUM {
     // added or removed.
     @Override
     public boolean needsPatching() {
-	//save.setStrings(Settings.LAST_MOD_LIST, SPDatabase.getModListDates());
-	// if more race records are added
-	// if meshes are added/removed
-	// I'm not sure that the check would be any more efficient than just
-	// running the patch...
-	return true;
+	save.setStrings(Settings.LAST_MOD_LIST, SPDatabase.getModListDates());
+	try {
+	    String temp = Files.getLastModifiedTime(
+		    FileSystems.getDefault().getPath("ArmorMangler.jar"))
+		    .toString();
+	    String oldFileTime = save.getStr(Settings.JAR_LAST_MOD);
+	    save.setStr(Settings.JAR_LAST_MOD, temp);
+	    if (!temp.equals(oldFileTime)) {
+		return true;
+	    }
+	} catch (IOException e) {
+	    SPGlobal.logException(e);
+	}
+	if (save.getStrings(Settings.MODELS_LAST_MOD)
+		.parallelStream()
+		.filter(s -> {
+		    int nl = s.indexOf('<');
+		    if (nl == -1) {
+			SPGlobal.log("needsPatching",
+				"Something wrong with saved model list, better patch.");
+			return true;
+		    }
+		    String filePath = s.substring(0, nl);
+		    String fileTime = s.substring(nl + 1);
+		    try {
+			if (fileTime.equals(Files.getLastModifiedTime(
+				FileSystems.getDefault().getPath(filePath))
+				.toString())) {
+			    return false;
+			}
+		    } catch (IOException e) {
+			SPGlobal.logException(e);
+		    }
+		    SPGlobal.log("needsPatching", filePath,
+			    " been modified at a different time than ",
+			    fileTime, " or is missing, better patch.");
+		    return true;
+
+		}).findFirst().isPresent()) {
+	    return true;
+	}
+	return false;
     }
 
-    // This function runs right as the program is about to close.
     @Override
     public void onExit(boolean patchWasGenerated) throws Exception {
+	((YourSaveFile) save).storeModelsLastMod();
     }
 
-    // This function runs when the program opens to "set things up"
-    // It runs right after the save file is loaded, and before the GUI is
-    // displayed
     @Override
     public void onStart() throws Exception {
 
@@ -390,15 +428,11 @@ public class ArmourMangler implements SUM {
 	throw new UnsupportedOperationException("Not supported yet.");
     }
 
-    // Add any mods that you REQUIRE to be present in order to patch.
     @Override
     public ArrayList<ModListing> requiredMods() {
 	return new ArrayList<>(0);
     }
 
-    // This is where you should write the bulk of your code.
-    // Write the changes you would like to make to the patch,
-    // but DO NOT export it. Exporting is handled internally.
     @Override
     public void runChangesToPatch() throws IGiveUpException {
 
@@ -499,6 +533,12 @@ public class ArmourMangler implements SUM {
     private void copyFile(Path oldPath, Path newPath) throws SkipThisException {
 	if (Files.exists(newPath)) {
 	    try {
+		FileTime lmt = Files.getLastModifiedTime(oldPath);
+		if (Files.getLastModifiedTime(newPath).equals(lmt)) {
+		    // File times are the same, assume content is identical.
+		    recordFileDependency(oldPath, lmt);
+		    return;
+		}
 		Files.delete(newPath);
 	    } catch (IOException e) {
 		return;
@@ -512,10 +552,17 @@ public class ArmourMangler implements SUM {
 	    } catch (IOException e2) {
 		try {
 		    Files.copy(oldPath, newPath);
+		    FileTime lmt = Files.getLastModifiedTime(oldPath);
+		    Files.setLastModifiedTime(newPath, lmt);
+		    recordFileDependency(oldPath, lmt);
 		} catch (IOException e3) {
 		    throw new SkipThisException(e3);
 		}
 	    }
 	}
+    }
+
+    private void recordFileDependency(Path path, FileTime lmt) {
+	((YourSaveFile) save).recordModelLastMod(path.toString(), lmt);
     }
 }

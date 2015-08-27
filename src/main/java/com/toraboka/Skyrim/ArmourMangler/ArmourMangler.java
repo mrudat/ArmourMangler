@@ -372,7 +372,7 @@ public class ArmourMangler implements SUM {
 		save.setStrings(Settings.LAST_MOD_LIST, SPDatabase.getModListDates());
 		try {
 			String temp = Files.getLastModifiedTime(
-					FileSystems.getDefault().getPath("ArmorMangler.jar"))
+					FileSystems.getDefault().getPath("Armour Mangler.jar"))
 					.toString();
 			String oldFileTime = save.getStr(Settings.JAR_LAST_MOD);
 			save.setStr(Settings.JAR_LAST_MOD, temp);

@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.toraboka</groupId>
     <artifactId>skyproc.ArmorMangler</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4</version>
 
     <name>Armour Mangler</name>
     <description>SkyProc patcher to attach any race-specific meshes found to base armours, so that each race can have a different armour model.</description>
